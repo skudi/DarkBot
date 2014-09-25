@@ -2,21 +2,62 @@ package org.darkstorm.darkbot.minecraftbot;
 
 import java.io.IOException;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.apache.commons.lang3.StringUtils;
-import org.darkstorm.darkbot.minecraftbot.ai.*;
-import org.darkstorm.darkbot.minecraftbot.auth.*;
-import org.darkstorm.darkbot.minecraftbot.event.*;
-import org.darkstorm.darkbot.minecraftbot.event.general.*;
-import org.darkstorm.darkbot.minecraftbot.event.protocol.client.*;
-import org.darkstorm.darkbot.minecraftbot.event.protocol.server.*;
+import org.darkstorm.darkbot.minecraftbot.ai.Activity;
+import org.darkstorm.darkbot.minecraftbot.ai.BasicTaskManager;
+import org.darkstorm.darkbot.minecraftbot.ai.TaskManager;
+import org.darkstorm.darkbot.minecraftbot.ai.WalkActivity;
+import org.darkstorm.darkbot.minecraftbot.auth.AuthService;
+import org.darkstorm.darkbot.minecraftbot.auth.AuthenticationException;
+import org.darkstorm.darkbot.minecraftbot.auth.InvalidSessionException;
+import org.darkstorm.darkbot.minecraftbot.auth.LegacyAuthService;
+import org.darkstorm.darkbot.minecraftbot.auth.OfflineSession;
+import org.darkstorm.darkbot.minecraftbot.auth.Session;
+import org.darkstorm.darkbot.minecraftbot.auth.YggdrasilAuthService;
+import org.darkstorm.darkbot.minecraftbot.event.ConcurrentEventBus;
+import org.darkstorm.darkbot.minecraftbot.event.EventBus;
+import org.darkstorm.darkbot.minecraftbot.event.EventHandler;
+import org.darkstorm.darkbot.minecraftbot.event.EventListener;
+import org.darkstorm.darkbot.minecraftbot.event.general.DisconnectEvent;
+import org.darkstorm.darkbot.minecraftbot.event.general.TickEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.client.ChatSentEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.client.HandshakeEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.client.InventoryCloseEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.client.PlayerMoveEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.client.PlayerMoveRotateEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.client.PlayerRotateEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.client.PlayerUpdateEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.ExperienceUpdateEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.HealthUpdateEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.KickEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.LoginEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.RespawnEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.TeleportEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.WindowCloseEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.WindowOpenEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.WindowSlotChangeEvent;
+import org.darkstorm.darkbot.minecraftbot.event.protocol.server.WindowUpdateEvent;
 import org.darkstorm.darkbot.minecraftbot.event.world.SpawnEvent;
-import org.darkstorm.darkbot.minecraftbot.protocol.*;
-import org.darkstorm.darkbot.minecraftbot.util.*;
-import org.darkstorm.darkbot.minecraftbot.world.*;
+import org.darkstorm.darkbot.minecraftbot.protocol.ConnectionHandler;
+import org.darkstorm.darkbot.minecraftbot.protocol.Protocol;
+import org.darkstorm.darkbot.minecraftbot.protocol.ProtocolProvider;
+import org.darkstorm.darkbot.minecraftbot.protocol.ProtocolX;
+import org.darkstorm.darkbot.minecraftbot.protocol.SocketConnectionHandler;
+import org.darkstorm.darkbot.minecraftbot.protocol.UnsupportedProtocolException;
+import org.darkstorm.darkbot.minecraftbot.util.ProxyData;
+import org.darkstorm.darkbot.minecraftbot.util.Timer;
+import org.darkstorm.darkbot.minecraftbot.util.Util;
+import org.darkstorm.darkbot.minecraftbot.world.BasicWorld;
+import org.darkstorm.darkbot.minecraftbot.world.World;
+import org.darkstorm.darkbot.minecraftbot.world.block.BlockLocation;
 import org.darkstorm.darkbot.minecraftbot.world.entity.MainPlayerEntity;
-import org.darkstorm.darkbot.minecraftbot.world.item.*;
+import org.darkstorm.darkbot.minecraftbot.world.item.ChestInventory;
+import org.darkstorm.darkbot.minecraftbot.world.item.Inventory;
+import org.darkstorm.darkbot.minecraftbot.world.item.ItemStack;
 
 public class MinecraftBot implements EventListener {
 	public static final int DEFAULT_PORT = 25565;
@@ -64,7 +105,7 @@ public class MinecraftBot implements EventListener {
 		else
 			authService = new LegacyAuthService();
 
-		if(builder.getSession() != null)
+		if(builder.getSession() != null && builder.getSession().isValidForAuthentication())
 			authService.validateSession(builder.getSession());
 		loginProxy = builder.getLoginProxy();
 		connectProxy = builder.getConnectProxy();
@@ -87,6 +128,9 @@ public class MinecraftBot implements EventListener {
 		setWorld(new BasicWorld(this, event.getWorldType(), event.getDimension(), event.getDifficulty(), event.getWorldHeight()));
 		player = new MainPlayerEntity(world, event.getPlayerId(), session.getUsername(), event.getGameMode());
 		world.spawnEntity(player);
+		say(String.format("/login %s", session.getPassword()));
+		BlockLocation target = new BlockLocation(977, 65, 955);
+		setActivity(new WalkActivity(this, target));
 	}
 
 	@EventHandler

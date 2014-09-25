@@ -5,6 +5,9 @@ public class OfflineSession extends Session {
 		super(username, null);
 	}
 
+	public OfflineSession(String username, String password) {
+		super(username, password);
+	}
 	@Override
 	public boolean isValidForLogin() {
 		return false;
@@ -17,6 +20,6 @@ public class OfflineSession extends Session {
 
 	@Override
 	public String toString() {
-		return "OfflineSession{username=" + getUsername() + "}";
+		return String.format("OfflineSession{username=%s, password=%s}", getUsername(), getPassword());
 	}
 }

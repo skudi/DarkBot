@@ -1,27 +1,89 @@
 package org.darkstorm.darkbot.mcwrapper.cli;
 
-import java.io.*;
-import java.util.*;
-import java.util.regex.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import joptsimple.*;
+import joptsimple.OptionException;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 import org.darkstorm.darkbot.mcwrapper.MinecraftBotWrapper;
 import org.darkstorm.darkbot.mcwrapper.backend.ChatBackend;
-import org.darkstorm.darkbot.mcwrapper.commands.*;
+import org.darkstorm.darkbot.mcwrapper.backend.TcpBackend;
+import org.darkstorm.darkbot.mcwrapper.commands.AttackAllCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.AttackCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.BuildCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.CalcCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.ChatDelayCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.ChopCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.DerpCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.DestroyCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.DropAllCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.DropCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.DropIdCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.EquipCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.FarmCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.FishCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.FollowCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.HelpCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.InteractCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.MineCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.OwnerCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.PlayersCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.QuitCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.SayCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.SetWalkCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.StatusCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.StopCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.SwitchCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.ToolCommand;
+import org.darkstorm.darkbot.mcwrapper.commands.WalkCommand;
 import org.darkstorm.darkbot.minecraftbot.MinecraftBot;
-import org.darkstorm.darkbot.minecraftbot.ai.*;
-import org.darkstorm.darkbot.minecraftbot.auth.*;
-import org.darkstorm.darkbot.minecraftbot.protocol.*;
-import org.darkstorm.darkbot.minecraftbot.util.*;
+import org.darkstorm.darkbot.minecraftbot.ai.AttackTask;
+import org.darkstorm.darkbot.minecraftbot.ai.AvoidDeathTask;
+import org.darkstorm.darkbot.minecraftbot.ai.BuildingTask;
+import org.darkstorm.darkbot.minecraftbot.ai.ChopTreesTask;
+import org.darkstorm.darkbot.minecraftbot.ai.DefendTask;
+import org.darkstorm.darkbot.minecraftbot.ai.DerpTask;
+import org.darkstorm.darkbot.minecraftbot.ai.DestroyingTask;
+import org.darkstorm.darkbot.minecraftbot.ai.EatTask;
+import org.darkstorm.darkbot.minecraftbot.ai.FallTask;
+import org.darkstorm.darkbot.minecraftbot.ai.FarmingTask;
+import org.darkstorm.darkbot.minecraftbot.ai.FishingTask;
+import org.darkstorm.darkbot.minecraftbot.ai.FollowTask;
+import org.darkstorm.darkbot.minecraftbot.ai.HostileTask;
+import org.darkstorm.darkbot.minecraftbot.ai.MiningTask;
+import org.darkstorm.darkbot.minecraftbot.ai.TaskManager;
+import org.darkstorm.darkbot.minecraftbot.auth.AuthService;
+import org.darkstorm.darkbot.minecraftbot.auth.AuthenticationException;
+import org.darkstorm.darkbot.minecraftbot.auth.OfflineSession;
+import org.darkstorm.darkbot.minecraftbot.auth.Session;
+import org.darkstorm.darkbot.minecraftbot.auth.YggdrasilAuthService;
+import org.darkstorm.darkbot.minecraftbot.auth.YggdrasilSession;
+import org.darkstorm.darkbot.minecraftbot.protocol.ProtocolProvider;
+import org.darkstorm.darkbot.minecraftbot.protocol.UnsupportedProtocolException;
+import org.darkstorm.darkbot.minecraftbot.util.ProxyData;
 import org.darkstorm.darkbot.minecraftbot.util.ProxyData.ProxyType;
-import org.darkstorm.darkbot.minecraftbot.world.*;
+import org.darkstorm.darkbot.minecraftbot.util.RealmsUtil;
+import org.darkstorm.darkbot.minecraftbot.util.Util;
+import org.darkstorm.darkbot.minecraftbot.world.Difficulty;
+import org.darkstorm.darkbot.minecraftbot.world.GameMode;
 
 public class CLIBotWrapper extends MinecraftBotWrapper {
-	private CLIBotWrapper(MinecraftBot bot, String owner) {
+	private CLIBotWrapper(MinecraftBot bot, String owner, OptionSet options) {
 		super(bot);
 		addOwner(owner);
 		addBackend(new ChatBackend(this));
+		addBackend(new TcpBackend(this, options));
 
 		TaskManager taskManager = bot.getTaskManager();
 		taskManager.registerTask(new FallTask(bot));
@@ -89,6 +151,7 @@ public class CLIBotWrapper extends MinecraftBotWrapper {
 		OptionSpec<String> socksProxyListOption = parser.accepts("socks-proxy-list", "File containing a list of SOCKS proxies, in address:port format.").withRequiredArg().describedAs("file");
 		OptionSpec<String> httpProxyListOption = parser.accepts("http-proxy-list", "File containing a list of HTTP proxies, in address:port format.").withRequiredArg().describedAs("file");
 
+		OptionSpec<String> tcpBackendOption = parser.accepts("tcp-backend", "Bind addres:port for tcpbackend.").withRequiredArg().describedAs("server-address[:port]");
 		OptionSet options;
 		try {
 			options = parser.parse(args);
@@ -127,10 +190,10 @@ public class CLIBotWrapper extends MinecraftBotWrapper {
 			accounts = null;
 			if(options.has(usernameOption)) {
 				username = options.valueOf(usernameOption);
-				if(!offline && options.has(passwordOption))
+				if(options.has(passwordOption))
 					password = options.valueOf(passwordOption);
 				else if(!offline) {
-					System.out.println("Option 'password' or option " + "'offline' required.");
+					System.out.println("Option 'password' required if no option 'offline'.");
 					printHelp(parser);
 					return;
 				} else
@@ -373,7 +436,7 @@ public class CLIBotWrapper extends MinecraftBotWrapper {
 				while(true) {
 					String proxy = socksProxies != null ? socksProxies.get(random.nextInt(socksProxies.size())) : defaultProxy;
 					try {
-						CLIBotWrapper bot = new CLIBotWrapper(createBot(server, session.getUsername(), session.getPassword(), authService, session, protocol, null, proxy), owner);
+						CLIBotWrapper bot = new CLIBotWrapper(createBot(server, session.getUsername(), session.getPassword(), authService, session, protocol, null, proxy), owner, options);
 						if(!bot.getBot().isConnected())
 							System.out.println("[" + session.getUsername() + "] Account failed");
 						while(bot.getBot().isConnected()) {
@@ -400,7 +463,11 @@ public class CLIBotWrapper extends MinecraftBotWrapper {
 						name = Util.generateRandomString(10 + random.nextInt(6));
 					else
 						name = username;
-					CLIBotWrapper bot = new CLIBotWrapper(createBot(server, name, null, null, null, protocol, null, proxy), owner);
+					Session session = null;
+					if (offline) {
+						session = new OfflineSession(username, password);
+					}
+					CLIBotWrapper bot = new CLIBotWrapper(createBot(server, name, null, null, session, protocol, null, proxy), owner, options);
 					while(bot.getBot().isConnected()) {
 						try {
 							Thread.sleep(1500);

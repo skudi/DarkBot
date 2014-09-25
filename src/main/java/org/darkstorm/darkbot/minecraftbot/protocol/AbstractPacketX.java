@@ -137,7 +137,12 @@ public abstract class AbstractPacketX implements PacketX {
 		if(length < 0)
 			throw new IOException("Invalid array length");
 		byte[] data = new byte[length];
+		try {
 		in.readFully(data);
+		} catch (EOFException ex) {
+			System.out.println("Packet to short, expected " + length + "b");
+			throw(ex);
+		}
 		return data;
 	}
 

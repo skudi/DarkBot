@@ -422,7 +422,7 @@ public final class Protocol5X extends AbstractProtocolX implements EventListener
 					JSONObject json = (JSONObject) parser.parse(message);
 
 					String text = parseChatMessage(json);
-					System.out.println("Parsing chat message: " + message + " -> " + text);
+					//System.out.print(this.getClass().getName() + ": Parsing chat message: \n[" + message + "] -> [" + text + "]");
 					eventBus.fire(new ChatReceivedEvent(text));
 				} catch(Exception exception) {
 					exception.printStackTrace();
